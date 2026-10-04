@@ -41,11 +41,12 @@
         { id: "notes",  say: "Each layer adds its notes to the lists. By the top, the list for the last word holds a rich picture of what the whole text is about, and what should come next.", vis: "The last column ('tired') glows teal; the light pulse reaches the top of the stack." },
       ] },
     { id: "s5-choose", title: "A score for every word, then a choice",
-      visual: "The last column flows into a long row of bars, one per possible token; a handful are tall (mat, floor, sofa), the rest a flat tail. A dial labelled 'adventurousness' (temperature) turns: low makes the tallest bar dominate; high flattens the bars. A ball drops onto the bars and lands on 'mat'.",
+      visual: "The last column flows into a long row of bars, one per possible token; a handful are tall (mat, floor, sofa), the rest a flat tail. A dial labelled 'adventurousness' (temperature) turns: low makes the tallest bar dominate; high flattens the bars. A ball drops onto the bars and lands on 'mat'. A second run drops another ball that lands on 'floor', giving a different sentence.",
       cues: [
         { id: "score",  say: "At the top, the model turns that final list into a score for every piece it knows, and the scores into likelihoods that add up to one hundred percent.", vis: "A long row of bars appears; mat 38 %, floor 17 %, sofa 5 % … and a flat tail." },
         { id: "temp",   say: "Then it chooses. A setting called temperature decides how adventurous it is. Low temperature almost always takes the favourite. High temperature takes more chances.", vis: "A temperature dial turns: T = 0.3 → mat towers (≈ 93 %); T = 2.2 → the bars flatten; back to 1.0." },
         { id: "pick",   say: "One piece is picked, mat, and added to the text.", vis: "A ball lands on 'mat'; it flies up into the sentence." },
+        { id: "again",  say: "Run the same text again, and the ball can land somewhere else. This time it lands on floor. That is why the same question can get a different answer.", vis: "A second ball (a seeded draw at T = 1.0) drops and lands on 'floor'; a second line appears under the first: 'The cat sat on the floor', labelled run 2." },
       ] },
     { id: "s6-loop", title: "Reading fast, writing one piece at a time",
       visual: "Left: the whole prompt slides into the stack at once, as one wide wave (fast). An orange 'memory' shelf beside the stack fills up. Right: writing; one narrow token at a time climbs the stack, glances at the shelf, and adds one small block to it. A counter shows the answer growing.",
@@ -352,13 +353,22 @@
       const tval = D.text(dial, DX, DY - DR - 18, "", { mono: true, size: 22, anchor: "middle", color: "logit" });
       const ball = el("circle", { cx: X0 + 8 * STEP + BW / 2, cy: 300, r: 13, fill: col("logit"), filter: G, opacity: 0 }, svg);
       const fly = D.text(svg, 0, 0, "mat", { mono: true, size: 34, anchor: "middle", color: "logit", weight: 600 });
+      // second run: a seeded draw at T = 1.0 that lands on 'floor' (index 22), found by search so it is computed, not assumed
+      const IF = 22; let lo = 0; for (let i = 0; i < IF; i++) lo += p0[i]; const hi = lo + p0[IF];
+      let u2 = 0; for (let sd = 1; sd < 5000; sd++) { const r2 = LX.rng(sd); r2(); const u = r2(); if (u >= lo && u < hi) { u2 = u; break; } }
+      const ball2 = el("circle", { cx: X0 + IF * STEP + BW / 2, cy: 300, r: 13, fill: col("logit"), filter: G, opacity: 0 }, svg);
+      const fly2 = D.text(svg, 0, 0, "floor", { mono: true, size: 34, anchor: "middle", color: "logit", weight: 600 });
+      const alt = D.text(svg, SX, SY + 70, "", { mono: true, size: FS, weight: 500, opacity: 0 });
+      const altBase = el("tspan", {}, alt), altAdd = el("tspan", { fill: col("logit") }, alt); altBase.textContent = "The cat sat on the";
+      const run1 = D.text(svg, SX + 25 * CW, SY - 4, "run 1", { mono: true, size: 20, color: "muted", opacity: 0 });
+      const run2 = D.text(svg, SX + 25 * CW, SY + 66, "run 2", { mono: true, size: 20, color: "muted", opacity: 0 });
+      const u2lab = D.text(svg, X0 + IF * STEP + BW / 2 + 22, 300, "u = " + u2.toFixed(2), { mono: true, size: 18, color: "muted", opacity: 0 });
       const Tof = t => {
         if (!(t >= ctx.cue("temp").start)) return 1;
         const a = ctx.p(t, "temp", .12, .38, E.inOut), b = ctx.p(t, "temp", .45, .72, E.inOut), c = ctx.p(t, "temp", .8, .95, E.inOut);
         return Math.exp(lerp(lerp(lerp(0, Math.log(.3), a), Math.log(2.2), b), 0, c));
       };
       return t => {
-        caret.setAttribute("x", SX + (18 + (add.textContent ? 4 : 0)) * CW + 4); caret.setAttribute("opacity", blink(t));
         D.fade(vec.g, ctx.p(t, "score", 0, .15)); D.fade(vlab, ctx.p(t, "score", 0, .15));
         vec.reveal(1); vglow.setAttribute("opacity", ctx.p(t, "score", 0, .15) * (1 - ctx.p(t, "score", .4, .6))); vglow.setAttribute("filter", G);
         arr.draw(ctx.p(t, "score", .1, .25));
@@ -383,12 +393,27 @@
         const drop = ctx.p(t, "pick", .05, .3, E.in), hMat = 350 * (q[8] / s) / .95;
         ball.setAttribute("cy", lerp(300, BASE - hMat - 13, drop));
         ball.setAttribute("opacity", ctx.p(t, "pick", 0, .05) * (1 - ctx.p(t, "pick", .35, .45)));
-        bars[8].setAttribute("filter", drop >= 1 ? G : "none");
+        const againOn = t >= ctx.cue("again").start;
+        bars[8].setAttribute("filter", drop >= 1 && !againOn ? G : "none");
         const f = ctx.p(t, "pick", .4, .75, E.inOut);
         const fx = lerp(X0 + 8 * STEP + BW / 2, SX + 20.5 * CW, f), fy = lerp(BASE - hMat - 50, SY, f);
         fly.setAttribute("transform", `translate(${fx} ${fy}) scale(${lerp(1, FS / 34, f)})`);
         fly.setAttribute("opacity", f > 0 && f < 1 ? 1 : 0);
         add.textContent = f >= 1 ? " mat" : "";
+        // second run lands on floor
+        const d2 = ctx.p(t, "again", .08, .32, E.in), hF = 350 * (q[IF] / s) / .95;
+        ball2.setAttribute("cy", lerp(300, BASE - hF - 13, d2));
+        ball2.setAttribute("opacity", ctx.p(t, "again", .04, .1) * (1 - ctx.p(t, "again", .38, .46)));
+        D.fade(u2lab, ctx.p(t, "again", .1, .2) * (1 - ctx.p(t, "again", .4, .5)));
+        bars[IF].setAttribute("filter", d2 >= 1 ? G : "none");
+        const f2 = ctx.p(t, "again", .4, .7, E.inOut);
+        const gx = lerp(X0 + IF * STEP + BW / 2, SX + 21.5 * CW, f2), gy = lerp(BASE - hF - 50, SY + 70, f2);
+        fly2.setAttribute("transform", `translate(${gx} ${gy}) scale(${lerp(1, FS / 34, f2)})`);
+        fly2.setAttribute("opacity", f2 > 0 && f2 < 1 ? 1 : 0);
+        D.fade(alt, ctx.p(t, "again", .35, .45));
+        altAdd.textContent = f2 >= 1 ? " floor" : "";
+        D.fade(run1, ctx.p(t, "again", .3, .4)); D.fade(run2, ctx.p(t, "again", .35, .45));
+        caret.setAttribute("x", SX + (18 + (add.textContent ? 4 : 0)) * CW + 4); caret.setAttribute("opacity", blink(t));
       };
     },
 

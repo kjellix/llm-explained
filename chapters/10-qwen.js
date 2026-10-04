@@ -105,7 +105,7 @@
           <div><b>${fmtN(p.n)}</b><span>parameters</span></div>
           <div><b>${(p.n / TOTAL * 100).toFixed(p.n / TOTAL < 0.001 ? 4 : 2)} %</b><span>of all ${fmtN(TOTAL)}</span></div>
           <div><b>${fmtB(p.n * 2)}</b><span>in bf16 (2 bytes each)</span></div>
-          <div><b>${fmtB(p.n * 5.5 / 8)}</b><span>at ≈ 5.5 bits (Q4_K_M average)</span></div>
+          <div><b>${fmtB(p.n * 5.64 / 8)}</b><span>at ≈ 5.6 bits (Q4_K_M average)</span></div>
           ${running}
         </div>
         <table class="lm-t">${p.ts.map(t => `<tr style="--k:${kc(p.kind)}"><td class="name">${t.name}<span class="s">${t.shape ? (t.name.startsWith("27 ") ? "27 × one block" : "[" + t.shape.join(" × ") + "]") + (t.bias ? " + bias [" + t.bias + "]" : "") : ""}${t.note ? (t.shape ? " · " : "") + t.note : ""}</span><div class="bar" style="width:${Math.max(0.5, t.n / max * 100)}%"></div></td><td class="n">${fmtN(t.n)}</td></tr>`).join("")}
@@ -434,6 +434,109 @@
     return t => ups.forEach(u => u(t));
   }
 
+  /* ======================================================= depth-vs-width */
+  function buildDepthWidth(ctx) {
+    const { svg } = ctx, ups = [];
+    D.backdrop(svg);
+    // per-layer parameters with Qwen3.8's own mix (3 DeltaNet : 1 attention), as a multiple of width²
+    const k = (3 * P.layerDelta + P.layerAttn) / 4 / (H * H);
+    const textTotal = (L, d) => L * k * d * d + 2 * V * d;
+    const shapes = [
+      { L: 32, d: 7168, name: "shallow and wide", cx: 250 },
+      { L: 64, d: 5120, name: "Qwen3.8-27B", cx: 610, me: true },
+      { L: 128, d: 3584, name: "deep and narrow", cx: 970 },
+      { L: 32, d: 5120, name: "simply cut to 32 layers", cx: 1340, cut: true },
+    ];
+    // slab width and slab thickness both ∝ width, so stack area ∝ layers × width² ∝ parameters
+    const A = 250 / 7168, C = 500 / (128 * 3584), BASE = 628;
+    D.label(svg, 80, 70, "Same parameter budget, different shapes");
+    const sub = D.text(svg, 80, 98, "slab width and thickness grow with the hidden size, so each stack's area is proportional to its parameters", { size: 15, color: "muted" });
+
+    shapes.forEach((sh, si) => {
+      sh.w = A * sh.d; sh.t = C * sh.d; sh.h = sh.L * sh.t; sh.top = BASE - sh.h;
+      sh.total = textTotal(sh.L, sh.d);
+      const g = el("g", {}, svg); sh.g = g;
+      const x0 = sh.cx - sh.w / 2;
+      sh.slabs = [];
+      for (let i = 0; i < sh.L; i++) {
+        const attn = i % 4 === 3, kind = attn ? "attn" : "delta";
+        const y = BASE - (i + 1) * sh.t;
+        const r = el("rect", { x: x0, y: y + .4, width: sh.w, height: Math.max(.8, sh.t - .9),
+          fill: LX.mix("bg", kind, attn ? .62 : .38), opacity: 0 }, g);
+        sh.slabs.push(r);
+      }
+      if (sh.me) el("rect", { x: x0 - 5, y: sh.top - 5, width: sh.w + 10, height: sh.h + 10, rx: 4, fill: "none",
+        stroke: LX.col("embed"), "stroke-width": 1.5, "stroke-dasharray": "4 4" }, g);
+      // moving pulse (one glowing slab outline per stack)
+      sh.pulse = el("rect", { x: x0 - 3, y: 0, width: sh.w + 6, height: Math.max(3, sh.t), rx: 1.5, fill: LX.col("embed"),
+        opacity: 0, filter: "url(#lx-glow)" }, svg);
+      // labels under the stack
+      const lab = el("g", { opacity: 0 }, svg); sh.lab = lab;
+      D.text(lab, sh.cx, BASE + 30, sh.name, { size: 17, weight: 600, anchor: "middle", color: sh.me ? "embed" : (sh.cut ? "text-2" : "text") });
+      D.text(lab, sh.cx, BASE + 54, `${sh.L} layers × ${fmtInt(sh.d)}`, { mono: true, size: 15, anchor: "middle", color: "text-2" });
+      sh.num = D.text(lab, sh.cx, BASE + 80, "", { mono: true, size: 16, anchor: "middle", color: sh.cut ? "muted" : "text", weight: 500 });
+      sh.steps = D.text(svg, sh.cx, BASE + 106, "", { mono: true, size: 14, anchor: "middle", color: "muted", opacity: 0 });
+      // quality gauge (no invented score: equal for equal size, dimmed for the cut model)
+      const gy = 776, gw = 200, gx = sh.cx - gw / 2;
+      const gg = el("g", { opacity: 0 }, svg); sh.gauge = gg;
+      el("rect", { x: gx, y: gy, width: gw, height: 10, rx: 5, fill: LX.col("line") }, gg);
+      sh.gfill = el("rect", { x: gx, y: gy, width: 0, height: 10, rx: 5, fill: LX.col("embed") }, gg);
+      if (sh.cut) { gg.firstChild.setAttribute("fill", "none"); gg.firstChild.setAttribute("stroke", LX.col("line-2")); gg.firstChild.setAttribute("stroke-dasharray", "4 4"); }
+      sh.gw = gw;
+      if (sh.cut) D.text(gg, sh.cx, gy + 34, "≈ a smaller model", { size: 15, anchor: "middle", color: "muted" });
+    });
+    const S = shapes;
+    // shared caption for the first three gauges
+    const qcap = el("g", { opacity: 0 }, svg);
+    D.label(qcap, 80, 762, "Next-token quality", { size: 13 });
+    D.bracket(qcap, { x1: S[0].cx - 100, y1: 800, x2: S[2].cx + 100, y2: 800, side: "bottom", label: "", color: "muted" });
+    D.text(qcap, (S[0].cx + S[2].cx) / 2, 832, "within a few % of each other at equal size (Kaplan et al. 2020)", { size: 15, anchor: "middle", color: "text-2" });
+    // side note: Qwen's own smaller models
+    const note = el("g", { opacity: 0 }, svg);
+    D.text(note, S[3].cx, 300, "Qwen's own smaller models", { size: 15, anchor: "middle", color: "text-2", weight: 600 });
+    D.text(note, S[3].cx, 326, "14 B: 40 × 5,120", { mono: true, size: 15, anchor: "middle", color: "muted" });
+    D.text(note, S[3].cx, 350, "9 B: 32 × 4,096", { mono: true, size: 15, anchor: "middle", color: "muted" });
+
+    ups.push(t => {
+      const first3 = [0, 1, 2];
+      // budget: build three stacks bottom-up and count their parameters
+      first3.forEach(i => {
+        const sh = S[i], p = ctx.p(t, "budget", .05 + i * .1, .55 + i * .1, LX.ease.inOut);
+        const n = Math.round(p * sh.L);
+        sh.slabs.forEach((r, j) => r.setAttribute("opacity", j < n ? 1 : 0));
+        const q = ctx.p(t, "budget", .1 + i * .1, .4 + i * .1);
+        sh.lab.setAttribute("opacity", q);
+        sh.num.textContent = "≈ " + (sh.total * ctx.p(t, "budget", .3 + i * .1, .75 + i * .1) / 1e9).toFixed(2) + " B";
+      });
+      // quality: gauges fill to the same level
+      const gq = ctx.p(t, "quality", .1, .6);
+      first3.forEach(i => { S[i].gauge.setAttribute("opacity", ctx.p(t, "quality", 0, .15)); S[i].gfill.setAttribute("width", S[i].gw * .82 * gq); });
+      qcap.setAttribute("opacity", ctx.p(t, "quality", .45, .7));
+      // steps: one pulse per stack, the same time per layer, so deeper stacks take longer
+      const c = ctx.cue("steps"), t0 = c.start + c.dur * .08, per = (c.dur * .84) / 128;
+      first3.forEach(i => {
+        const sh = S[i], k2 = (t - t0) / per;              // layers climbed so far
+        const on = t >= t0 && k2 < sh.L && t < c.end;
+        sh.pulse.setAttribute("opacity", on ? .85 : 0);
+        if (on) sh.pulse.setAttribute("y", BASE - (Math.floor(k2) + 1) * sh.t);
+        sh.steps.setAttribute("opacity", ctx.p(t, "steps", 0, .08));
+        sh.steps.textContent = `${Math.min(sh.L, Math.max(0, Math.floor(k2)))} / ${sh.L} steps`;
+        if (t >= c.end) sh.steps.textContent = `${sh.L} steps per token`;
+      });
+      // cut: the fourth stack, half the area
+      const sh = S[3], pc = ctx.p(t, "cut", .05, .4, LX.ease.inOut), nc = Math.round(pc * sh.L);
+      sh.slabs.forEach((r, j) => r.setAttribute("opacity", j < nc ? .8 : 0));
+      sh.lab.setAttribute("opacity", ctx.p(t, "cut", .1, .35));
+      sh.num.textContent = "≈ " + (sh.total * ctx.p(t, "cut", .2, .55) / 1e9).toFixed(2) + " B";
+      sh.steps.setAttribute("opacity", ctx.p(t, "cut", .3, .45)); sh.steps.textContent = `${sh.L} steps per token`;
+      sh.gauge.setAttribute("opacity", ctx.p(t, "cut", .45, .6));
+      sh.gfill.setAttribute("width", 0);   // no score is claimed: just "a smaller model"
+      note.setAttribute("opacity", ctx.p(t, "cut", .6, .8));
+      sub.setAttribute("opacity", ctx.p(t, "budget", 0, .1));
+    });
+    return t => ups.forEach(u => u(t));
+  }
+
 LX.chapter({
   id: "qwen", num: 10, title: "Qwen3.8-27B, layer by layer", toc: "Qwen3.8-27B layer by layer",
   kicker: "Every tensor, every parameter",
@@ -533,6 +636,34 @@ LX.chapter({
     } },
 
     { prose: `
+      <h3>Why 64 layers, and not 32</h3>
+      <p>The number of layers is a design choice, not a law of nature. The Qwen team has not published why it chose 64, but the trade-offs behind the choice are well understood. For a given budget of parameters, a model can be <strong>deep and narrow</strong> or <strong>shallow and wide</strong>. Each layer's size grows with the square of its width, so the same 24 billion layer parameters can be shaped in several ways:</p>
+      <div class="lx-table-wrap"><table class="lx-table">
+        <tr><th>Shape</th><th class="num">Layers × width</th><th class="num">Parameters (text model)</th><th>Steps per token</th></tr>
+        <tr><td>Shallow and wide</td><td class="num">32 × 7,168</td><td class="num">≈ 27.4 B</td><td>32</td></tr>
+        <tr><td><strong>Qwen3.8-27B</strong></td><td class="num">64 × 5,120</td><td class="num">26.9 B</td><td>64</td></tr>
+        <tr><td>Deep and narrow</td><td class="num">128 × 3,584</td><td class="num">≈ 25.7 B</td><td>128</td></tr>
+        <tr><td>Simply cut to 32 layers</td><td class="num">32 × 5,120</td><td class="num">≈ 14.7 B</td><td>32</td></tr>
+      </table></div>
+      <p class="c-muted">Computed with Qwen3.8's own layer proportions (3 DeltaNet layers to 1 attention layer; one layer ≈ 14.5 × width² parameters), plus the embedding and output tables.</p>
+      <p><strong>At the same size, the shape matters surprisingly little.</strong> In the best-known study of how language models scale (Kaplan and colleagues, 2020), the ratio of width to depth could change by a factor of 40 while the quality of next-token prediction changed by only a few percent. A 32-layer model of the same total size would most likely be about as good, not half as good.</p>
+      <p><strong>Depth still buys something.</strong> Every layer is one more step of refinement that happens <em>after</em> the previous one, and some problems need many steps in a row. Studies on smaller models find that deeper models handle multi-step reasoning better than wider ones of the same size, although the benefit shrinks as layers are added. The price is speed: layers cannot run at the same time for one token, so each extra layer adds a little delay. Wide layers are easier to spread across a chip's many cores.</p>
+      <p><strong>Simply removing half the layers is different.</strong> A 32-layer Qwen3.8 at the same width would have about 14.7 billion parameters, roughly a model of the next size down. The Qwen family shows this pattern: the 32-billion and 27-billion models have 64 layers of width 5,120, the 14-billion model has 40 layers of the same width, and the 9-billion model has 32 layers of width 4,096. Experiments that cut layers out of a trained model (Gromov and colleagues, 2024) found that some large models keep their scores on question-answering tests with up to 40–50% of their layers removed, but maths reasoning gets worse as soon as any layer is taken away.</p>
+      <p>There are also practical reasons for the exact number. The 3 : 1 pattern needs a multiple of 4, and every layer count in the Qwen3.5–3.8 hybrid family is one (64, 32, 24). Powers of two also divide evenly when a model is split across several chips. And 64 × 5,120 is exactly the shape of the earlier Qwen3-32B, which suggests the team kept a shape it already knew to train well.</p>` },
+
+    { scene: {
+      id: "depth-vs-width", title: "Deep and narrow, or shallow and wide",
+      build: buildDepthWidth,
+      visual: "Four model shapes drawn side by side to scale, each as a stack of slabs whose width is the hidden size and whose count is the number of layers (3:1 colouring kept). Below each: layers × width and parameter count, computed. A token pulse climbs each stack at the same speed per layer, so the 128-layer stack takes longest. A quality gauge above the first three stays almost level (labelled 'next-token quality: within a few %'), and a 'reasoning steps' counter shows 32 / 64 / 128. The fourth stack ('simply cut to 32 layers') is half as tall and visibly half the area; its parameter counter shows ≈ 14.7 B and a dimmer gauge, with a side note listing Qwen's own smaller models (14B: 40 × 5,120; 9B: 32 × 4,096).",
+      cues: [
+        { id: "budget", say: "The same budget of parameters can be shaped in different ways. Thirty-two wide layers, sixty-four medium ones like Qwen, or a hundred and twenty-eight narrow ones. All three hold about twenty-seven billion parameters.", vis: "Three stacks build bottom-up, drawn so area ∝ parameters: 32 × 7,168 (≈ 27.43 B) · 64 × 5,120 (26.90 B, Qwen, dashed outline) · 128 × 3,584 (≈ 25.65 B); counters computed from Qwen's per-layer proportions." },
+        { id: "quality", say: "At the same size, the shape changes surprisingly little. In large studies of language models, quality differed by only a few percent across a very wide range of shapes.", vis: "Equal next-token-quality gauges under the three stacks with one bracket: 'within a few % of each other at equal size (Kaplan et al. 2020)'. No scores are shown." },
+        { id: "steps", say: "Depth still matters for some things. Every layer is one more step of refinement in a row. Deeper models tend to be better at problems that need many steps, but each extra layer also adds a little delay.", vis: "A pulse climbs each stack at the same rate per layer; step counters 32 / 64 / 128; the deep stack finishes last." },
+        { id: "cut", say: "Simply cutting Qwen to thirty-two layers would be something else: a model of about fifteen billion parameters, more like its smaller siblings, and weaker at reasoning.", vis: "Fourth stack: 32 × 5,120, about half the area, ≈ 14.72 B; its gauge is an empty dashed track labelled '≈ a smaller model'; side note 'Qwen's own smaller models: 14 B: 40 × 5,120 · 9 B: 32 × 4,096'." },
+      ],
+    } },
+
+    { prose: `
       <h3>Where the 27.78 billion parameters live</h3>` },
 
     { html: `<div class="lx-table-wrap"><table class="lx-table">
@@ -569,7 +700,7 @@ LX.chapter({
         <tr><th>Format</th><th class="num">Bits per weight</th><th class="num">Size</th><th>Notes</th></tr>
         <tr><td><abbr>bf16</abbr> (original)</td><td class="num">16</td><td class="num">55.6 GB</td><td>As published</td></tr>
         <tr><td>Q8_0</td><td class="num">≈ 8.5</td><td class="num">≈ 29 GB</td><td>Practically lossless</td></tr>
-        <tr><td><abbr>Q4</abbr> (Q4_K_M)</td><td class="num">≈ 5.5</td><td class="num">19.0 GB</td><td>Popular for desktops; small quality loss</td></tr>
+        <tr><td><abbr>Q4</abbr> (Q4_K_M)</td><td class="num">≈ 5.6</td><td class="num">19.0 GB</td><td>Popular for desktops; small quality loss</td></tr>
       </table></div>
       <p>Weights are not the only memory cost. While the model writes, it also keeps a cache of past work for each conversation (<a href="#kv-cache">Chapter 14</a>).</p>` },
 

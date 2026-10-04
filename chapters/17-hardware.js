@@ -264,7 +264,7 @@ LX.chapter({
   body: [
     { prose: `
       <p>Every chip has two speed limits. <strong>Memory bandwidth</strong> is how many bytes per second it can read from memory. <strong>Compute</strong> is how many arithmetic operations (<abbr>FLOP</abbr>s) per second it can do. A model's speed depends on which limit it hits first. This chapter explains why the answer is different for one user and for many, and why that makes an NVIDIA server and an Apple Silicon Mac behave so differently.</p>
-      <p>We use the numbers from earlier chapters. Qwen3.8-27B quantized to <abbr>Q4</abbr> (about 5.5 bits per weight on average, because some tensors are kept at higher precision) is about <strong>19 GB</strong>. Writing one token costs about <strong>55.6 billion operations</strong> by the rule of thumb of two per parameter (<a href="#numbers">Chapter 3</a>). The exact count for a text token is a little lower, 51.2 billion (<a href="#recap">Chapter 18</a>), which does not change any conclusion here.</p>` },
+      <p>We use the numbers from earlier chapters. Qwen3.8-27B quantized to <abbr>Q4</abbr> (about 5.6 bits per weight on average, because some tensors are kept at higher precision) is about <strong>19 GB</strong>. Writing one token costs about <strong>55.6 billion operations</strong> by the rule of thumb of two per parameter (<a href="#numbers">Chapter 3</a>). The exact count for a text token is a little lower, 51.2 billion (<a href="#recap">Chapter 18</a>), which does not change any conclusion here.</p>` },
 
     { scene: {
       id: "hw-one-user", title: "One user: the arithmetic waits for memory", build: HW.oneUser,

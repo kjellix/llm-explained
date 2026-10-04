@@ -129,6 +129,7 @@
   function buildTemp(ctx) {
     const { svg } = ctx, ups = [];
     D.backdrop(svg);
+    const nBack = svg.childNodes.length;   // everything drawn after the backdrop is grouped below
     D.label(svg, 80, 70, "Temperature · probabilities = softmax(logit ÷ T)");
     const X = i => 250 + i * 170, BWd = 96, BASE = 690, HMAX = 400;
     LX.el("line", { x1: 170, y1: BASE, x2: 1350, y2: BASE, stroke: LX.col("line-2"), "stroke-width": 1.5 }, svg);
@@ -173,6 +174,76 @@
       }
       return Math.exp(L);
     };
+
+    /* group the bars, dial and note so they can step back for the "runs" cue */
+    const main = LX.el("g", {});
+    while (svg.childNodes.length > nBack) main.appendChild(svg.childNodes[nBack]);
+    svg.appendChild(main);
+
+    /* ---- runs: the same five dice rolls, read at T = 1.0 and at T = 0.2 ----
+       u values come from a seeded generator; picks are inverse-CDF lookups,
+       so the narration ("mat, couch, mat, floor, mat" / all mat) is computed, not typed. */
+    const RR = LX.rng(1); RR();
+    const U = Array.from({ length: 5 }, () => RR());
+    const pickOf = (P, u) => { let c = 0; for (let i = 0; i < P.length; i++) { c += P[i]; if (u < c) return i; } return P.length - 1; };
+    const COLS = [{ T: 1.0, x: 110 }, { T: 0.2, x: 850 }].map(c => ({ ...c, P: softT(c.T) }));
+    COLS.forEach(c => { c.picks = U.map(u => pickOf(c.P, u)); });
+    const said = { "1": ["mat", "couch", "mat", "floor", "mat"], "0.2": ["mat", "mat", "mat", "mat", "mat"] };
+    COLS.forEach(c => {
+      const got = c.picks.map(i => TOK[i].trim());
+      if (got.join() !== said[String(c.T)].join()) console.warn("temperature/runs: narration does not match computed picks", c.T, got);
+    });
+    const runsG = LX.el("g", { opacity: 0 }, svg);
+    D.label(runsG, 110, 92, "Five runs of the same text · the same five dice rolls", { size: 15 });
+    const SW = 640, SY = 190;
+    COLS.forEach((c, ci) => {
+      const g = LX.el("g", {}, runsG); c.g = g;
+      D.text(g, c.x, 150, "T = " + c.T.toFixed(1), { mono: true, size: 26, weight: 600, color: ci === 0 ? "logit" : "text" });
+      // probability strip: each token a segment as wide as its probability
+      let acc = 0;
+      c.P.forEach((p, i) => {
+        const w = p * SW;
+        LX.el("rect", { x: c.x + acc * SW, y: SY, width: Math.max(0, w - 1), height: 26, rx: 3, fill: shade(i) }, g);
+        if (w > 58) D.tokenText(g, c.x + acc * SW + w / 2, SY + 50, TOK[i], { size: 16, color: "text-2" });
+        acc += p;
+      });
+      // markers and rows
+      c.marks = U.map((u, r) => {
+        const m = LX.el("g", { opacity: 0 }, g);
+        LX.el("path", { d: "M-8 -14 L8 -14 L0 0 Z", fill: LX.col("text") }, m);
+        D.text(m, 0, -20, String(r + 1), { mono: true, size: 13, anchor: "middle", color: "muted" });
+        return { m, x: c.x + u * SW };
+      });
+      c.rows = c.picks.map((ip, r) => {
+        const y = 300 + r * 104;
+        const row = LX.el("g", { opacity: 0 }, g);
+        D.text(row, c.x, y + 34, String(r + 1), { mono: true, size: 16, color: "dim" });
+        D.text(row, c.x + 30, y + 34, "The cat sat on the", { mono: true, size: 24, color: "text-2" });
+        const top = ip === 0;
+        const chip = D.tokenChip(row, { x: c.x + 330, y: y + 4, w: 130, h: 46, text: TOK[ip], color: top ? "token" : "logit", size: 22 });
+        if (!top) chip.box.setAttribute("stroke-width", 3);
+        D.text(row, c.x + 478, y + 35, fmtPct(c.P[ip]), { mono: true, size: 17, color: top ? "muted" : "logit" });
+        return row;
+      });
+    });
+    const runsNote = D.text(runsG, 800, 852, "Same model, same dice. Only the temperature changed how the rolls are read.", { size: 20, anchor: "middle", color: "text-2", opacity: 0 });
+    ups.push(t => {
+      const on = ctx.p(t, "runs", 0, .06);
+      main.setAttribute("opacity", 1 - on);
+      runsG.setAttribute("opacity", on);
+      COLS.forEach((c, ci) => {
+        const a0 = ci === 0 ? .06 : .56, step = ci === 0 ? .085 : .06;
+        c.rows.forEach((row, r) => {
+          const p = ctx.p(t, "runs", a0 + r * step, a0 + r * step + step * .8);
+          const mk = c.marks[r];
+          const drop = ctx.p(t, "runs", a0 + r * step, a0 + r * step + step * .5, E.in);
+          mk.m.setAttribute("transform", `translate(${mk.x} ${lerp(SY - 70, SY - 2, drop)})`);
+          mk.m.setAttribute("opacity", Math.min(1, drop * 3));
+          row.setAttribute("opacity", ctx.p(t, "runs", a0 + r * step + step * .45, a0 + r * step + step * .9));
+        });
+      });
+      D.fade(runsNote, ctx.p(t, "runs", .9, .98));
+    });
 
     ups.push(t => {
       const T = Tof(t), P = softT(T);
@@ -408,17 +479,19 @@
           <tr><td><code>·roof</code></td><td class="num">0.0 %</td><td class="num">1.7 %</td><td class="num">3.9 %</td><td class="num">6.7 %</td></tr>
           <tr><td><code>·moon</code></td><td class="num">0.0 %</td><td class="num">0.2 %</td><td class="num">0.9 %</td><td class="num">2.5 %</td></tr>
         </table></div>
-        <p>Temperature never changes the <em>order</em> of the tokens. <code>·mat</code> is always the favourite. It only changes how much the favourite dominates.</p>` },
+        <p>Temperature never changes the <em>order</em> of the tokens. <code>·mat</code> is always the favourite. It only changes how much the favourite dominates.</p>
+        <p>Being the favourite does not mean being chosen. At T = 1, <code>·mat</code> has 47.7 %, so more than half of all runs pick something else: five runs of the same prompt can give mat, couch, mat, floor and mat. At T = 0.2 the same dice rolls land on <code>·mat</code> almost every time. This is why the same question can get different answers, and why a low temperature makes a model more repeatable.</p>` },
 
       { scene: {
         id: "temperature", title: "Temperature reshapes the distribution", build: buildTemp,
-        visual: "Seven vertical probability bars over token labels, recomputed every frame as softmax(logit ÷ T). A temperature dial at the top right (log scale 0.2–1.5) sweeps; the bars morph smoothly with it. Under each bar the live division is shown (e.g. 5.0 ÷ 0.20 = 25.00).",
+        visual: "Seven vertical probability bars over token labels, recomputed every frame as softmax(logit ÷ T). A temperature dial at the top right (log scale 0.2–1.5) sweeps; the bars morph smoothly with it. Under each bar the live division is shown (e.g. 5.0 ÷ 0.20 = 25.00). Finally five seeded dice rolls are read at T = 1.0 and at T = 0.2, showing that sampling can pick a token other than the favourite.",
         cues: [
           { id: "start", say: "Here are the model's probabilities at temperature one, exactly as the model produced them.", vis: "Bars at T = 1: 47.7, 21.4, 11.8, 7.9, 6.5, 3.9, 0.9 %." },
           { id: "how",   say: "Temperature works on the logits, before softmax. Every logit is divided by the temperature.", vis: "Under each bar: logit ÷ T and the result appear, e.g. 5.0 ÷ 1.00 = 5.00." },
           { id: "cold",  say: "Turn the temperature down to zero point two, and the gaps between the scores grow five times larger. Mat now takes ninety-eight percent. The text becomes focused and predictable.", vis: "Dial sweeps to 0.2; ·mat bar shoots to 98.1 %; others collapse to almost zero." },
           { id: "hot",   say: "Turn it up to one and a half, and the gaps shrink. Mat falls to about a third, and even moon gets a small chance. The text becomes more surprising, and at very high temperatures it falls apart.", vis: "Dial sweeps to 1.5; bars flatten: 35.7, 20.9, 14.0, 10.7, 9.4, 6.7, 2.5 %." },
           { id: "order", say: "Notice that the order never changes. Temperature only decides how much the favourite dominates.", vis: "Rank badges 1–7 appear above the bars and stay fixed while the dial sweeps 1.5 → 0.45 → 1.0." },
+          { id: "runs",  say: "Here is what that means in practice. The same text, run five times at temperature one, gave mat, couch, mat, floor and mat. With the very same five rolls of the dice at temperature zero point two, all five runs gave mat. The model did not change. Only the temperature changed how the dice were read.", vis: "Bars step back. Two columns, T = 1.0 and T = 0.2, each with a probability strip; five seeded dice rolls (the same u values in both columns) drop onto the strips. T = 1.0 completes 'The cat sat on the …' with mat, couch (11.8 %, pink outline), mat, floor (21.4 %, pink outline), mat; T = 0.2 gives mat five times." },
         ],
       } },
 
