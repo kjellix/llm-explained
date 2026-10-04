@@ -7,7 +7,7 @@ An animated, interactive course that follows a single token through a real, mode
 - **Three ways to watch:** a short version (~3 min, for anyone), the main story (~17 min, technical) and the full course (~47 min, every scene).
 - **18 chapters** with animated scenes, narration, optional "Deeper" maths boxes with plain-language readings, and interactive tools (including the real Qwen3.8 tokenizer running in your browser).
 
-Open the site: `https://<user>.github.io/llm-explained/` — or clone and serve the folder with any static web server (`python3 -m http.server`). Everything is static HTML/JS/SVG; no build step.
+Open the site: https://kjellix.github.io/llm-explained/ — or clone and serve the folder with any static web server (`python3 -m http.server`). Everything is static HTML/JS/SVG; no build step.
 
 ## Licences
 
