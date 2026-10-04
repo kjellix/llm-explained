@@ -1,0 +1,2 @@
+/* Chapter manifest: the order scripts are loaded in by index.html and video.html. */
+LX.CHAPTER_FILES = ["chapters/01-big-picture.js","chapters/02-families.js","chapters/03-numbers.js","chapters/04-tokens.js","chapters/05-embeddings.js","chapters/06-layer.js","chapters/07-attention.js","chapters/08-deltanet.js","chapters/09-mlp.js","chapters/10-qwen.js","chapters/11-output.js","chapters/12-sampling.js","chapters/13-prefill-decode.js","chapters/14-kv-cache.js","chapters/15-mtp.js","chapters/16-vision.js","chapters/17-hardware.js","chapters/18-recap.js"];

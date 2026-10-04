@@ -1,0 +1,19 @@
+# Publish only the course itself (allow-list).
+/*
+!/index.html
+!/manifest.webmanifest
+!/.nojekyll
+!/.gitignore
+!/README.md
+!/LICENSE
+!/LICENSE-CONTENT.md
+!/assets/
+!/chapters/
+!/stories/
+!/video/
+/video/*
+!/video/timings.js
+!/video/audio/
+/video/audio/_samples/
+/video/audio/**/*.json
+.DS_Store

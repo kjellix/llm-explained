@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LLM Explained</title>
+<meta name="description" content="How a large language model works, from text to tokens to 64 layers to the next token, using Qwen3.8-27B as the running example.">
+<link rel="icon" href="assets/img/lx-mark.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/img/lx-icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LLM Explained">
+<meta name="theme-color" content="#0a0e16">
+<link rel="stylesheet" href="assets/css/lx-theme.css">
+</head>
+<body data-level="deeper">
+<div class="lx-shell">
+  <aside class="lx-toc">
+    <div class="lx-toc-top">
+      <a class="lx-brand" href="#home">
+        <img src="assets/img/lx-mark.svg" alt="" width="34" height="34">
+        <div><b>LLM Explained</b><span>Inside Qwen3.8-27B</span></div>
+      </a>
+      <button class="lx-toc-toggle" type="button" aria-label="Contents">Contents</button>
+    </div>
+    <div class="lx-toc-body">
+      <div class="lx-toc-label">Depth</div>
+      <div class="lx-level" role="group" aria-label="Depth">
+        <button data-level="overview" aria-pressed="false">Overview</button>
+        <button data-level="deeper" aria-pressed="true">Deeper</button>
+      </div>
+      <p class="lx-level-hint"></p>
+      <div class="lx-toc-label">Contents</div>
+      <ol></ol>
+    </div>
+  </aside>
+  <main class="lx-main" id="top">
+    <section class="lx-home">
+      <header class="lx-hero">
+        <div class="lx-kicker">A visual course</div>
+        <h1>How a language model writes, one token at a time</h1>
+        <p>From the text you type, to tokens, to vectors, through 64 layers of a real model, to a probability for every possible next token. Then we pick one and do it all again.</p>
+        <p class="c-muted">Every number about the model is real and comes from Qwen3.8-27B's own configuration. Example values inside vectors are illustrative. Pick a chapter below, or start from the beginning.</p>
+        <p><a class="lx-start" href="#big-picture">Start with chapter 1 →</a></p>
+      </header>
+      <div class="lx-stories"></div>
+    </section>
+  </main>
+</div>
+<script src="assets/js/lx-engine.js"></script>
+<script src="video/timings.js"></script>
+<script src="assets/js/lx-components.js"></script>
+<script src="assets/js/lx-glossary.js"></script>
+<script src="assets/js/lx-math-help.js"></script>
+<script src="assets/js/lx-page.js"></script>
+<script src="assets/js/lx-story.js"></script>
+<script src="chapters/01-big-picture.js"></script>
+<script src="chapters/02-families.js"></script>
+<script src="chapters/03-numbers.js"></script>
+<script src="chapters/04-tokens.js"></script>
+<script src="chapters/05-embeddings.js"></script>
+<script src="chapters/06-layer.js"></script>
+<script src="chapters/07-attention.js"></script>
+<script src="chapters/08-deltanet.js"></script>
+<script src="chapters/09-mlp.js"></script>
+<script src="chapters/10-qwen.js"></script>
+<script src="chapters/11-output.js"></script>
+<script src="chapters/12-sampling.js"></script>
+<script src="chapters/13-prefill-decode.js"></script>
+<script src="chapters/14-kv-cache.js"></script>
+<script src="chapters/15-mtp.js"></script>
+<script src="chapters/16-vision.js"></script>
+<script src="chapters/17-hardware.js"></script>
+<script src="chapters/18-recap.js"></script>
+<script src="stories/stories.js"></script>
+<script>document.fonts.ready.then(() => LX.buildPage());</script>
+</body>
+</html>
